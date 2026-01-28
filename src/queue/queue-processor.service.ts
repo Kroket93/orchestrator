@@ -20,7 +20,6 @@ interface QueuedTask {
   position: number;
   title: string;
   description: string;
-  type: string;
   repo: string | null;
   repos: string | null;
   investigation_only: number;
@@ -111,7 +110,7 @@ export class QueueProcessorService implements OnModuleInit {
       const nextTask = db
         .prepare(
           `
-        SELECT q.task_id, q.position, t.title, t.description, t.type, t.repo, t.repos, t.investigation_only
+        SELECT q.task_id, q.position, t.title, t.description, t.repo, t.repos, t.investigation_only
         FROM queue q
         JOIN tasks t ON q.task_id = t.id
         WHERE t.status = '${STATUS.QUEUED}' AND q.status = 'queued'
