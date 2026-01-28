@@ -13,6 +13,12 @@ import {
   getAgentTimeout,
   isHostAgent,
 } from '../types/index.js';
+import { StarterPromptService } from '../prompts/starter-prompt.service.js';
+import { CodingPromptService } from '../prompts/coding-prompt.service.js';
+import { ReviewerPromptService } from '../prompts/reviewer-prompt.service.js';
+import { DeployerPromptService } from '../prompts/deployer-prompt.service.js';
+import { VerifierPromptService } from '../prompts/verifier-prompt.service.js';
+import { AuditorPromptService } from '../prompts/auditor-prompt.service.js';
 
 const docker = new Docker();
 
@@ -58,6 +64,12 @@ export class AgentManagerService implements OnModuleInit, OnModuleDestroy {
     @Inject(forwardRef(() => DatabaseService))
     private readonly databaseService: DatabaseService,
     private readonly logger: LoggerService,
+    private readonly starterPromptService: StarterPromptService,
+    private readonly codingPromptService: CodingPromptService,
+    private readonly reviewerPromptService: ReviewerPromptService,
+    private readonly deployerPromptService: DeployerPromptService,
+    private readonly verifierPromptService: VerifierPromptService,
+    private readonly auditorPromptService: AuditorPromptService,
   ) {}
 
   onModuleInit(): void {
@@ -331,9 +343,85 @@ export class AgentManagerService implements OnModuleInit, OnModuleDestroy {
   }
 
   private generatePrompt(config: AgentConfig, agentId: string): string {
-    // Simplified prompt generation
-    // TODO: Extract full prompt services
-    return `# Task: ${config.title}
+    const agentType = config.agentType || 'starter';
+
+    switch (agentType) {
+      case 'starter':
+        return this.starterPromptService.getStarterPrompt({
+          taskId: config.taskId,
+          title: config.title,
+          description: config.description,
+          repo: config.repo,
+          repos: config.repos,
+          agentId,
+          treeContext: config.treeContext,
+          repoRegistry: config.repoRegistry,
+        });
+
+      case 'coding':
+        // Generate branch name
+        const branchName = config.existingBranch || `agent/${agentId}`;
+        return this.codingPromptService.getCodingPrompt({
+          taskId: config.taskId,
+          title: config.title,
+          description: config.description,
+          repo: config.repo,
+          agentId,
+          branchName,
+          executionPlan: config.executionPlan,
+          treeContext: config.treeContext,
+          reviewFeedback: config.reviewFeedback,
+          prNumber: config.prNumber,
+        });
+
+      case 'reviewer':
+        return this.reviewerPromptService.getReviewerPrompt({
+          taskId: config.taskId,
+          title: config.title,
+          repo: config.repo,
+          agentId,
+          prNumber: config.prNumber || 0,
+          prUrl: config.prUrl || '',
+          branch: config.branch || '',
+        });
+
+      case 'deployer':
+        return this.deployerPromptService.getDeployerPrompt({
+          taskId: config.taskId,
+          title: config.title,
+          repo: config.repo,
+          agentId,
+          prNumber: config.prNumber,
+          prUrl: config.prUrl,
+          deploymentUrl: config.deploymentUrl,
+        });
+
+      case 'verifier':
+        return this.verifierPromptService.getVerifierPrompt({
+          taskId: config.taskId,
+          title: config.title,
+          description: config.description,
+          repo: config.repo,
+          agentId,
+          deploymentUrl: config.deploymentUrl,
+          prNumber: config.prNumber,
+        });
+
+      case 'auditor':
+        return this.auditorPromptService.getAuditorPrompt({
+          taskId: config.taskId,
+          title: config.title,
+          description: config.description,
+          repo: config.repo,
+          agentId,
+          deploymentUrl: config.deploymentUrl || `https://${config.repo}.kroket.dev`,
+          focusAreas: config.focusAreas,
+          treeContext: config.treeContext,
+        });
+
+      default:
+        // Fallback for unknown agent types
+        return `# Task: ${config.title}
 
 Agent ID: ${agentId}
 Task ID: ${config.taskId}
@@ -347,6 +435,7 @@ ${config.description || 'No description provided.'}
 
 Complete the task described above. When finished, report your results.
 `;
+    }
   }
 
   private handleHostAgentExit(

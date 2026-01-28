@@ -4,6 +4,8 @@ import { ScheduleModule } from '@nestjs/schedule';
 
 import { DatabaseModule } from './database/database.module.js';
 import { LoggerModule } from './logger/logger.module.js';
+import { PromptsModule } from './prompts/prompts.module.js';
+import { GithubModule } from './github/github.module.js';
 import { AgentsModule } from './agents/agents.module.js';
 import { EventsModule } from './events/events.module.js';
 import { QueueModule } from './queue/queue.module.js';
@@ -21,6 +23,8 @@ import { QueueModule } from './queue/queue.module.js';
     // Core modules
     DatabaseModule,
     LoggerModule,
+    PromptsModule,
+    GithubModule,
 
     // Feature modules
     AgentsModule,

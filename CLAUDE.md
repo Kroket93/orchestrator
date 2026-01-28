@@ -18,7 +18,11 @@ The orchestrator runs independently of vibe-suite and communicates via HTTP APIs
 Orchestrator (Port 3020)
 ├── Agent Manager - Docker/host process management
 ├── Event Service - Event-driven workflow
+├── Event Processor - Routes events to spawn agents
 ├── Queue Service - Task queue management
+├── Queue Processor - Auto-processes queued tasks
+├── GitHub Service - GitHub API operations
+├── Prompt Services - Agent prompt generation
 └── Database - SQLite for agent state
 ```
 
@@ -34,13 +38,18 @@ Orchestrator (Port 3020)
 | **App Module** | `src/app.module.ts` | ✅ Done | Root module with all imports |
 | **Database Service** | `src/database/database.service.ts` | ✅ Done | SQLite with WAL, all tables, agent log methods |
 | **Logger Service** | `src/logger/logger.service.ts` | ✅ Done | Console + DB logging |
-| **Agent Manager** | `src/agents/agent-manager.service.ts` | ⚠️ Partial | Core functionality works, simplified prompts |
+| **Agent Manager** | `src/agents/agent-manager.service.ts` | ✅ Done | Docker/host process management with full prompt generation |
 | **Agents Controller** | `src/agents/agents.controller.ts` | ✅ Done | All CRUD endpoints |
 | **Event Service** | `src/events/event.service.ts` | ✅ Done | File-based event system |
+| **Event Processor** | `src/events/event-processor.service.ts` | ✅ Done | Routes events to spawn appropriate agent types |
 | **Events Controller** | `src/events/events.controller.ts` | ✅ Done | Event CRUD endpoints |
 | **Queue Service** | `src/queue/queue.service.ts` | ✅ Done | Queue management, settings |
+| **Queue Processor** | `src/queue/queue-processor.service.ts` | ✅ Done | Polls queue and spawns agents |
 | **Queue Controller** | `src/queue/queue.controller.ts` | ✅ Done | Queue endpoints |
-| **Types** | `src/types/index.ts` | ✅ Done | All shared types and constants |
+| **GitHub Service** | `src/github/github.service.ts` | ✅ Done | Token management, clone URLs, PR operations |
+| **GitHub Controller** | `src/github/github.controller.ts` | ✅ Done | GitHub API endpoints |
+| **Prompt Services** | `src/prompts/*.ts` | ✅ Done | All 6 agent type prompts |
+| **Types** | `src/types/index.ts` | ✅ Done | All shared types, events, and constants |
 
 ### What's Working
 
@@ -48,20 +57,26 @@ Orchestrator (Port 3020)
 2. **Agent Lifecycle** - Start, monitor, kill, timeout handling
 3. **Log Streaming** - Buffered log collection from containers/processes
 4. **Event System** - Create, list, mark processed (file-based)
-5. **Queue Management** - Add/remove tasks, settings (pause, max concurrent)
-6. **Database** - All tables created, migrations run
-7. **REST APIs** - All endpoints functional
+5. **Event Processing** - Automatic routing of events to spawn agents:
+   - `task.assigned` → starter agent
+   - `task.plan.created` → coding agent
+   - `pr.created` / `pr.updated` → reviewer agent
+   - `pr.merged` / `deploy.requested` → deployer agent
+   - `deploy.completed` → verifier agent
+   - `audit.requested` → auditor agent
+   - `pr.changes.requested` → fix-up coding agent
+   - `verify.passed/failed` / `audit.completed` → task completion
+6. **Queue Management** - Add/remove tasks, settings (pause, max concurrent)
+7. **Queue Processing** - Auto-spawns agents for queued tasks
+8. **Database** - All tables created, migrations run
+9. **REST APIs** - All endpoints functional
+10. **GitHub Integration** - Push, PR creation/merge, repo management
+11. **Full Prompt Generation** - Complete prompts for all 6 agent types
 
-### What's Missing / Simplified
+### What's Remaining
 
 | Component | Status | What's Missing |
 |-----------|--------|----------------|
-| **Prompt Services** | ❌ Not extracted | Full prompt generation for each agent type (starter, coding, reviewer, deployer, verifier, auditor). Currently using simplified generic prompt. |
-| **Event Processor** | ❌ Not implemented | The service that polls pending events and routes them to spawn appropriate agent types. This is the multi-agent workflow brain. |
-| **Queue Processor** | ❌ Not implemented | The scheduled service that polls the queue and spawns agents for queued tasks. |
-| **GitHub Service** | ❌ Not extracted | Clone URL generation, default branch detection, PR operations |
-| **Tree Context** | ❌ Not extracted | Task hierarchy context (ancestors, siblings) for agent prompts |
-| **Execution Plans** | ❌ Not extracted | Plan parsing and passing to coding agents |
 | **Real-time Log Streaming** | ⚠️ Basic | SSE endpoint exists but doesn't stream live updates |
 | **Vibe-Suite Integration** | ❌ Not started | HTTP client in vibe-suite to call orchestrator APIs |
 
@@ -69,70 +84,7 @@ Orchestrator (Port 3020)
 
 ## Remaining Work
 
-### Phase 1: Extract Prompt Services (High Priority)
-
-Extract the 6 prompt services from vibe-suite:
-
-```
-src/prompts/
-├── starter-prompt.service.ts    # Task analysis, creates execution plan
-├── coding-prompt.service.ts     # Code implementation, PR creation
-├── reviewer-prompt.service.ts   # PR review, merge/request changes
-├── deployer-prompt.service.ts   # Deployment execution
-├── verifier-prompt.service.ts   # Post-deploy verification
-└── auditor-prompt.service.ts    # Proactive issue discovery
-```
-
-**Source files in vibe-suite:**
-- `/home/claude/projects/vibe-suite/backend/src/nest/agents/prompts/`
-
-### Phase 2: Extract Event Processor (High Priority)
-
-Extract the event processor that handles multi-agent workflow:
-
-```
-src/events/
-└── event-processor.service.ts   # Routes events to agent spawning
-```
-
-**Handles event types:**
-- `task.assigned` → spawn starter agent
-- `task.plan.created` → spawn coding agent
-- `pr.created` → spawn reviewer agent
-- `pr.merged` → spawn deployer agent
-- `deploy.completed` → spawn verifier agent
-- `verify.passed` → mark task complete
-- `verify.failed` → handle failure
-- `pr.changes.requested` → spawn coding agent with feedback
-
-**Source file:**
-- `/home/claude/projects/vibe-suite/backend/src/nest/events/event-processor.service.ts`
-
-### Phase 3: Extract Queue Processor (Medium Priority)
-
-Extract the queue processor that auto-processes queued tasks:
-
-```
-src/queue/
-└── queue-processor.service.ts   # Polls queue, spawns agents
-```
-
-**Source file:**
-- `/home/claude/projects/vibe-suite/backend/src/nest/queue/queue-processor.service.ts`
-
-### Phase 4: Extract GitHub Service (Medium Priority)
-
-Extract GitHub operations:
-
-```
-src/github/
-└── github.service.ts   # Token management, clone URLs, API calls
-```
-
-**Source file:**
-- `/home/claude/projects/vibe-suite/backend/src/nest/github/github.service.ts`
-
-### Phase 5: Vibe-Suite Integration (Lower Priority)
+### Phase 5: Vibe-Suite Integration (Next Step)
 
 Create HTTP client in vibe-suite to call orchestrator:
 
@@ -163,13 +115,28 @@ orchestrator/
 │   │   └── database.module.ts
 │   ├── events/
 │   │   ├── event.service.ts          # Event file management
+│   │   ├── event-processor.service.ts # Event routing to agents
 │   │   ├── events.controller.ts      # REST endpoints
 │   │   └── events.module.ts
+│   ├── github/
+│   │   ├── github.service.ts         # GitHub API operations
+│   │   ├── github.controller.ts      # REST endpoints
+│   │   └── github.module.ts
 │   ├── logger/
 │   │   ├── logger.service.ts         # Logging
 │   │   └── logger.module.ts
+│   ├── prompts/
+│   │   ├── starter-prompt.service.ts  # Task analysis prompts
+│   │   ├── coding-prompt.service.ts   # Code implementation prompts
+│   │   ├── reviewer-prompt.service.ts # PR review prompts
+│   │   ├── deployer-prompt.service.ts # Deployment prompts
+│   │   ├── verifier-prompt.service.ts # Post-deploy verification prompts
+│   │   ├── auditor-prompt.service.ts  # Issue discovery prompts
+│   │   ├── index.ts                   # Barrel exports
+│   │   └── prompts.module.ts
 │   ├── queue/
 │   │   ├── queue.service.ts          # Queue operations
+│   │   ├── queue-processor.service.ts # Auto-processing
 │   │   ├── queue.controller.ts       # REST endpoints
 │   │   └── queue.module.ts
 │   ├── types/
@@ -209,6 +176,11 @@ npm start
 | DATABASE_PATH | /home/claude/data/orchestrator.db | SQLite database path |
 | EVENT_DIR | /home/claude/data/orchestrator-events | Event file storage |
 | GITHUB_TOKEN | - | GitHub token for agent operations |
+| GITHUB_OWNER | Kroket93 | GitHub organization/user |
+| PROJECTS_DIR | /home/claude/projects | Local projects directory |
+| WORKSPACES_DIR | /home/claude/agent-workspaces | Agent workspace directory |
+| ENABLE_QUEUE_PROCESSOR | true | Enable/disable auto queue processing |
+| USE_MULTI_AGENT_EVENTS | false | Use event-driven multi-agent workflow |
 
 ## API Endpoints
 
@@ -238,6 +210,18 @@ npm start
 - `DELETE /api/queue/:taskId` - Remove from queue
 - `POST /api/queue/clear` - Clear completed items
 
+### GitHub
+- `GET /api/github/status` - Check GitHub token configuration
+- `GET /api/github/repo/:repo` - Get repository info
+- `GET /api/github/repo/:repo/default-branch` - Get default branch
+- `GET /api/github/clone-url/:repo` - Get clone URL (authenticated if token available)
+- `POST /api/github/push` - Push branch to GitHub
+- `POST /api/github/pr` - Create pull request
+- `GET /api/github/pr/:repo/:prNumber` - Get PR info
+- `POST /api/github/pr/:repo/:prNumber/merge` - Merge PR
+- `GET /api/github/prs/:repo` - List PRs
+- `POST /api/github/ensure-remote/:repo` - Ensure GitHub remote exists
+
 ### Health
 - `GET /api/health` - Health check
 
@@ -255,6 +239,27 @@ pm2 logs orchestrator --lines 50
 
 # Save process list
 pm2 save
+```
+
+---
+
+## Event-Driven Workflow
+
+The orchestrator supports an event-driven multi-agent workflow. When `USE_MULTI_AGENT_EVENTS=true`:
+
+```
+1. Task queued → Queue processor creates task.assigned event
+2. task.assigned → Event processor spawns starter agent
+3. Starter creates task.plan.created → Spawns coding agent
+4. Coding creates pr.created → Spawns reviewer agent
+5. Reviewer approves → pr.merged → Spawns deployer agent
+6. Deployer completes → deploy.completed → Spawns verifier agent
+7. Verifier passes → verify.passed → Task marked complete
+
+Alternative flows:
+- Reviewer requests changes → pr.changes.requested → Spawns fix-up coding agent
+- Verifier fails → verify.failed → Creates bug work item
+- Starter requests audit → audit.requested → Spawns auditor agent
 ```
 
 ---
@@ -294,6 +299,7 @@ pm2 save
 | status | TEXT | pending, queued, assigned, in_progress, completed, failed |
 | repo | TEXT | Primary repository |
 | repos | TEXT | JSON array of repos |
+| execution_plan | TEXT | JSON execution plan from starter |
 | assigned_agent_id | TEXT | Currently assigned agent |
 
 ### queue

@@ -3,6 +3,7 @@ export type AgentType = 'starter' | 'coding' | 'reviewer' | 'deployer' | 'verifi
 export type AgentMode = 'docker' | 'host';
 export type AgentDbStatus = 'starting' | 'running' | 'completed' | 'failed' | 'timeout' | 'killed';
 export type TaskStatus = 'pending' | 'queued' | 'assigned' | 'in_progress' | 'completed' | 'failed';
+export type TaskType = 'epic' | 'feature' | 'story' | 'task' | 'bug';
 
 // Agent Configuration
 export interface AgentTypeConfig {
@@ -71,6 +72,59 @@ export interface AgentInstance {
   agentType: AgentType;
 }
 
+// Tree Context (task hierarchy for agent prompts)
+export interface AgentTreeContext {
+  ancestors: ParsedTask[];
+  current: ParsedTask;
+  siblings: ParsedTask[];
+}
+
+// Parsed Task structure (used in tree context)
+export interface ParsedTask {
+  id: string;
+  work_item_number?: number;
+  title: string;
+  description?: string;
+  type: TaskType;
+  status: TaskStatus;
+  repo?: string;
+  repos?: string[];
+  executionPlan?: ExecutionPlan;
+  comments?: TaskComment[];
+}
+
+// Task Comment
+export interface TaskComment {
+  id: string;
+  content: string;
+  agentId: string;
+  timestamp: string;
+}
+
+// Execution Plan (from starter agent)
+export interface ExecutionPlan {
+  summary: string;
+  affectedFiles: Array<{
+    path: string;
+    action: 'create' | 'modify' | 'delete';
+    description: string;
+  }>;
+  steps: string[];
+  testingStrategy: string;
+  risks?: string[];
+  estimatedComplexity?: 'simple' | 'medium' | 'complex';
+}
+
+// Repository information for agent prompts
+export interface RepoInfo {
+  name: string;
+  path: string;
+  description?: string;
+  techStack?: string;
+  pm2Apps?: string[];
+  deploymentUrl?: string;
+}
+
 // Agent Configuration for spawning
 export interface AgentConfig {
   taskId: string;
@@ -80,6 +134,9 @@ export interface AgentConfig {
   description: string;
   investigationOnly?: boolean;
   agentType?: AgentType;
+  treeContext?: AgentTreeContext;
+  executionPlan?: ExecutionPlan;
+  repoRegistry?: RepoInfo[];
   // Additional fields for specific agent types
   prNumber?: number;
   prUrl?: string;
@@ -90,26 +147,245 @@ export interface AgentConfig {
   existingBranch?: string;
 }
 
-// Event Types
+// ==================== Event Types ====================
+
 export type EventType =
   | 'task.assigned'
   | 'task.plan.created'
+  | 'task.closed'
+  | 'deploy.requested'
   | 'pr.created'
+  | 'pr.updated'
   | 'pr.changes.requested'
   | 'pr.merged'
   | 'deploy.completed'
+  | 'deploy.failed'
   | 'verify.passed'
   | 'verify.failed'
   | 'audit.requested'
-  | 'audit.completed';
+  | 'audit.finding'
+  | 'audit.completed'
+  | 'agent.escalation';
 
-export interface AgentEvent {
+/** Base event structure */
+export interface BaseEvent {
   id: string;
   type: EventType;
   timestamp: string;
   source: string;
   payload: Record<string, unknown>;
 }
+
+/** Event for task assignment */
+export interface TaskAssignedEvent extends BaseEvent {
+  type: 'task.assigned';
+  payload: {
+    taskId: string;
+    title: string;
+    description: string;
+    repo: string;
+    repos?: string[];
+    investigationOnly?: boolean;
+  };
+}
+
+/** Event for plan creation */
+export interface TaskPlanCreatedEvent extends BaseEvent {
+  type: 'task.plan.created';
+  payload: {
+    taskId: string;
+    repo: string;
+    plan: ExecutionPlan;
+  };
+}
+
+/** Event for closing a task without further action */
+export interface TaskClosedEvent extends BaseEvent {
+  type: 'task.closed';
+  payload: {
+    taskId: string;
+    reason: string;
+    resolution: 'already_resolved' | 'duplicate' | 'invalid' | 'wont_fix' | 'no_action_needed';
+  };
+}
+
+/** Event for deployment request */
+export interface DeployRequestedEvent extends BaseEvent {
+  type: 'deploy.requested';
+  payload: {
+    taskId: string;
+    repo: string;
+    reason: string;
+    commit?: string;
+  };
+}
+
+/** Event for PR creation */
+export interface PrCreatedEvent extends BaseEvent {
+  type: 'pr.created';
+  payload: {
+    taskId: string;
+    repo: string;
+    prNumber: number;
+    prUrl: string;
+    branch: string;
+  };
+}
+
+/** Event for PR updated (after fix-up) */
+export interface PrUpdatedEvent extends BaseEvent {
+  type: 'pr.updated';
+  payload: {
+    taskId: string;
+    repo: string;
+    prNumber: number;
+    prUrl: string;
+    branch: string;
+  };
+}
+
+/** Event for PR changes requested */
+export interface PrChangesRequestedEvent extends BaseEvent {
+  type: 'pr.changes.requested';
+  payload: {
+    taskId: string;
+    repo: string;
+    prNumber: number;
+    branch: string;
+    reviewComments: string;
+  };
+}
+
+/** Event for PR merge */
+export interface PrMergedEvent extends BaseEvent {
+  type: 'pr.merged';
+  payload: {
+    taskId: string;
+    repo: string;
+    prNumber: number;
+    mergeCommit: string;
+    branch?: string;
+    commitSha?: string;
+  };
+}
+
+/** Event for successful deployment */
+export interface DeployCompletedEvent extends BaseEvent {
+  type: 'deploy.completed';
+  payload: {
+    taskId: string;
+    repo: string;
+    url: string;
+    status: 'success';
+  };
+}
+
+/** Event for failed deployment */
+export interface DeployFailedEvent extends BaseEvent {
+  type: 'deploy.failed';
+  payload: {
+    taskId: string;
+    repo: string;
+    error: string;
+    logs?: string;
+  };
+}
+
+/** Event for verification passed */
+export interface VerifyPassedEvent extends BaseEvent {
+  type: 'verify.passed';
+  payload: {
+    taskId: string;
+    repo: string;
+    summary: string;
+  };
+}
+
+/** Event for verification failed */
+export interface VerifyFailedEvent extends BaseEvent {
+  type: 'verify.failed';
+  payload: {
+    taskId: string;
+    repo: string;
+    bug: {
+      description: string;
+      steps: string;
+      expected: string;
+      actual: string;
+    };
+  };
+}
+
+/** Event for audit requested */
+export interface AuditRequestedEvent extends BaseEvent {
+  type: 'audit.requested';
+  payload: {
+    taskId: string;
+    repo: string;
+    url: string;
+    focusAreas?: string[];
+  };
+}
+
+/** Event for audit finding */
+export interface AuditFindingEvent extends BaseEvent {
+  type: 'audit.finding';
+  payload: {
+    taskId: string;
+    repo: string;
+    parentId?: string;
+    finding: {
+      severity: 'low' | 'medium' | 'high' | 'critical';
+      category: 'bug' | 'ux' | 'performance' | 'security' | 'accessibility';
+      title: string;
+      description: string;
+      steps?: string;
+      screenshot?: string;
+    };
+  };
+}
+
+/** Event for audit completed */
+export interface AuditCompletedEvent extends BaseEvent {
+  type: 'audit.completed';
+  payload: {
+    taskId: string;
+    repo: string;
+    summary: string;
+    findingsCount: number;
+    duration: number;
+  };
+}
+
+/** Event for agent escalation */
+export interface AgentEscalationEvent extends BaseEvent {
+  type: 'agent.escalation';
+  payload: {
+    taskId: string;
+    agentId: string;
+    reason: string;
+    context?: Record<string, unknown>;
+  };
+}
+
+/** Union type for all events */
+export type AgentEvent =
+  | TaskAssignedEvent
+  | TaskPlanCreatedEvent
+  | TaskClosedEvent
+  | DeployRequestedEvent
+  | PrCreatedEvent
+  | PrUpdatedEvent
+  | PrChangesRequestedEvent
+  | PrMergedEvent
+  | DeployCompletedEvent
+  | DeployFailedEvent
+  | VerifyPassedEvent
+  | VerifyFailedEvent
+  | AuditRequestedEvent
+  | AuditFindingEvent
+  | AuditCompletedEvent
+  | AgentEscalationEvent;
 
 // Queue Settings
 export const QUEUE_SETTING_KEYS = {
@@ -118,28 +394,14 @@ export const QUEUE_SETTING_KEYS = {
   MAX_CONCURRENT: 'max_concurrent',
 } as const;
 
-// Execution Plan (from starter agent)
-export interface ExecutionPlan {
-  steps: ExecutionStep[];
-  context?: string;
-}
+// ==================== Utility Functions ====================
 
-export interface ExecutionStep {
-  description: string;
-  files?: string[];
-  type?: 'create' | 'modify' | 'delete' | 'test' | 'config';
-}
-
-// Tree Context (task hierarchy)
-export interface AgentTreeContext {
-  ancestors: TaskSummary[];
-  siblings: TaskSummary[];
-}
-
-export interface TaskSummary {
-  id: string;
-  title: string;
-  type: string;
-  status: string;
-  description?: string;
+/**
+ * Format work item number with WI- prefix and zero-padding
+ */
+export function formatWorkItemNumber(num?: number): string {
+  if (num === undefined || num === null) {
+    return 'WI-???';
+  }
+  return `WI-${num.toString().padStart(3, '0')}`;
 }

@@ -2,8 +2,17 @@ import { Injectable, OnModuleInit } from '@nestjs/common';
 import * as fs from 'fs';
 import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
-import { AgentEvent, EventType } from '../types/index.js';
+import { EventType } from '../types/index.js';
 import { LoggerService } from '../logger/logger.service.js';
+
+/** Event structure for storage */
+export interface StoredEvent {
+  id: string;
+  type: EventType;
+  timestamp: string;
+  source: string;
+  payload: Record<string, unknown>;
+}
 
 const EVENT_DIRS = {
   base: process.env.EVENT_DIR || '/home/claude/data/orchestrator-events',
@@ -29,11 +38,11 @@ export class EventService implements OnModuleInit {
     type: EventType,
     payload: Record<string, unknown>,
     source: string,
-  ): AgentEvent {
+  ): StoredEvent {
     const timestamp = new Date().toISOString();
     const id = uuidv4();
 
-    const event: AgentEvent = {
+    const event: StoredEvent = {
       id,
       type,
       timestamp,
@@ -50,7 +59,7 @@ export class EventService implements OnModuleInit {
     return event;
   }
 
-  getPendingEvents(): AgentEvent[] {
+  getPendingEvents(): StoredEvent[] {
     const files = fs.readdirSync(EVENT_DIRS.pending)
       .filter(f => f.endsWith('.json'))
       .sort();
@@ -58,11 +67,11 @@ export class EventService implements OnModuleInit {
     return files.map(filename => {
       const filepath = path.join(EVENT_DIRS.pending, filename);
       const content = fs.readFileSync(filepath, 'utf8');
-      return JSON.parse(content) as AgentEvent;
+      return JSON.parse(content) as StoredEvent;
     });
   }
 
-  getPendingEvent(eventId: string): AgentEvent | null {
+  getPendingEvent(eventId: string): StoredEvent | null {
     const files = fs.readdirSync(EVENT_DIRS.pending)
       .filter(f => f.includes(eventId.slice(0, 8)));
 
@@ -70,7 +79,7 @@ export class EventService implements OnModuleInit {
 
     const filepath = path.join(EVENT_DIRS.pending, files[0]);
     const content = fs.readFileSync(filepath, 'utf8');
-    return JSON.parse(content) as AgentEvent;
+    return JSON.parse(content) as StoredEvent;
   }
 
   markProcessed(eventId: string): boolean {
@@ -91,7 +100,7 @@ export class EventService implements OnModuleInit {
     return true;
   }
 
-  getProcessedEvents(limit?: number): AgentEvent[] {
+  getProcessedEvents(limit?: number): StoredEvent[] {
     let files = fs.readdirSync(EVENT_DIRS.processed)
       .filter(f => f.endsWith('.json'))
       .sort()
@@ -104,11 +113,11 @@ export class EventService implements OnModuleInit {
     return files.map(filename => {
       const filepath = path.join(EVENT_DIRS.processed, filename);
       const content = fs.readFileSync(filepath, 'utf8');
-      return JSON.parse(content) as AgentEvent;
+      return JSON.parse(content) as StoredEvent;
     });
   }
 
-  getAllEvents(limit?: number): AgentEvent[] {
+  getAllEvents(limit?: number): StoredEvent[] {
     const pending = this.getPendingEvents();
     const processed = this.getProcessedEvents(limit ? limit - pending.length : undefined);
 
