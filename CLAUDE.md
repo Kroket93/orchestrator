@@ -2,6 +2,10 @@
 
 Agent orchestration service for managing Claude Code agents.
 
+**GitHub Repository:** https://github.com/Kroket93/orchestrator
+
+**Status:** ✅ Running on port 3020
+
 ## Overview
 
 This service is responsible for:
