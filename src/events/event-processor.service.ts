@@ -61,13 +61,12 @@ export class EventProcessorService implements OnModuleInit, OnModuleDestroy {
 
       // Get current task
       const task = db.prepare(`
-        SELECT id, title, description, type, status, repo, repos, execution_plan
+        SELECT id, title, description, status, repo, repos, execution_plan
         FROM tasks WHERE id = ?
       `).get(taskId) as {
         id: string;
         title: string;
         description: string | null;
-        type: string;
         status: string;
         repo: string | null;
         repos: string | null;
@@ -82,7 +81,7 @@ export class EventProcessorService implements OnModuleInit, OnModuleDestroy {
         id: task.id,
         title: task.title,
         description: task.description || undefined,
-        type: task.type as ParsedTask['type'],
+        type: 'task', // Default type for simplified schema
         status: task.status as ParsedTask['status'],
         repo: task.repo || undefined,
         repos: task.repos ? JSON.parse(task.repos) : undefined,
@@ -680,8 +679,8 @@ ${bug.expected}
 ${bug.actual}`;
 
     db.prepare(`
-      INSERT INTO tasks (id, title, description, type, status, repo, created_at)
-      VALUES (?, ?, ?, 'bug', 'pending', ?, datetime('now'))
+      INSERT INTO tasks (id, title, description, status, repo, created_at)
+      VALUES (?, ?, ?, 'pending', ?, datetime('now'))
     `).run(bugId, bugTitle, bugDescription, repo);
 
     // Mark original task as failed
@@ -772,8 +771,8 @@ ${finding.steps ? `### Steps to Reproduce\n${finding.steps}` : ''}
 ${finding.screenshot ? `### Screenshot\n![Screenshot](${finding.screenshot})` : ''}`;
 
     db.prepare(`
-      INSERT INTO tasks (id, title, description, type, status, repo, created_at)
-      VALUES (?, ?, ?, 'bug', 'pending', ?, datetime('now'))
+      INSERT INTO tasks (id, title, description, status, repo, created_at)
+      VALUES (?, ?, ?, 'pending', ?, datetime('now'))
     `).run(bugId, bugTitle, bugDescription, repo);
 
     this.logger.info('event-processor', `Created audit finding work item ${bugId} under parent ${parentId}`);

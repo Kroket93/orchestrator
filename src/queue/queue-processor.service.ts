@@ -217,13 +217,12 @@ export class QueueProcessorService implements OnModuleInit {
       const db = this.databaseService.getDatabase();
 
       const task = db.prepare(`
-        SELECT id, title, description, type, status, repo, repos, execution_plan
+        SELECT id, title, description, status, repo, repos, execution_plan
         FROM tasks WHERE id = ?
       `).get(taskId) as {
         id: string;
         title: string;
         description: string | null;
-        type: string;
         status: string;
         repo: string | null;
         repos: string | null;
@@ -238,7 +237,7 @@ export class QueueProcessorService implements OnModuleInit {
         id: task.id,
         title: task.title,
         description: task.description || undefined,
-        type: task.type as ParsedTask['type'],
+        type: 'task', // Default type for simplified schema
         status: task.status as ParsedTask['status'],
         repo: task.repo || undefined,
         repos: task.repos ? JSON.parse(task.repos) : undefined,
