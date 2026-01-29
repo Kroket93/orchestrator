@@ -87,7 +87,21 @@ Orchestrator (Port 3020)
 
 ## Vibe-Suite Integration (Phase 5) ✅ Complete
 
-The vibe-suite application now integrates with the orchestrator via an HTTP client.
+The vibe-suite application now integrates with the orchestrator via an HTTP client. **The orchestrator is the single source of truth for all agent data.**
+
+### Data Architecture
+
+**Single Source of Truth:**
+- All agent records live in the orchestrator's database
+- Vibe-suite queries orchestrator APIs for agent data (list, details, analytics)
+- Vibe-suite only stores `assigned_agent_id` on tasks for task-agent linkage
+- No agent duplication between services
+
+**Benefits:**
+- No data synchronization issues
+- Historical agent data maintained in orchestrator
+- Consistent agent view across all clients
+- Simpler architecture - orchestrator owns agent lifecycle
 
 ### Integration Architecture
 
@@ -95,17 +109,22 @@ The vibe-suite application now integrates with the orchestrator via an HTTP clie
 ┌────────────────────────────────────────────────────────────────┐
 │                     VIBE-SUITE (Port 3030)                     │
 ├────────────────────────────────────────────────────────────────┤
-│  ┌───────────────────────┐     ┌────────────────────────────┐  │
-│  │   OrchestratorClient  │────>│  ORCHESTRATOR (Port 3020)  │  │
-│  │                       │     │  - Agent spawning          │  │
-│  └───────────────────────┘     │  - Queue processing        │  │
-│            │                   │  - Event handling          │  │
-│            │ uses              └────────────────────────────┘  │
-│            ▼                                                   │
 │  ┌───────────────────────┐                                     │
-│  │  AgentManagerService  │                                     │
-│  │  - Try orchestrator   │                                     │
-│  │  - Fallback to local  │                                     │
+│  │   AgentsController    │────────────────────┐                │
+│  │   (Proxy Pattern)     │                    │                │
+│  └───────────────────────┘                    │                │
+│            │                                  │                │
+│            │ delegates to                     ▼                │
+│            │                    ┌────────────────────────────┐ │
+│  ┌───────────────────────┐      │  ORCHESTRATOR (Port 3020)  │ │
+│  │   OrchestratorClient  │─────>│  - Agent spawning          │ │
+│  │                       │      │  - Agent state/logs        │ │
+│  └───────────────────────┘      │  - Queue processing        │ │
+│            │                    │  - Event handling          │ │
+│            │ fallback           │  - Historical data         │ │
+│            ▼                    └────────────────────────────┘ │
+│  ┌───────────────────────┐                                     │
+│  │  Local Implementation │ (only used when orchestrator down)  │
 │  └───────────────────────┘                                     │
 └────────────────────────────────────────────────────────────────┘
 ```
@@ -141,16 +160,38 @@ vibe-suite/backend/src/nest/orchestrator/
 
 When orchestrator is unavailable, vibe-suite falls back to local implementation:
 
+**Agent Spawning (AgentManagerService):**
 ```typescript
 async spawnAgent(config: AgentConfig): Promise<AgentInstance> {
   if (this.orchestratorClient?.isAvailable()) {
     try {
-      return await this.orchestratorClient.spawnAgent(config);
+      const result = await this.orchestratorClient.spawnAgent(config);
+      // Only update task linkage locally - orchestrator owns agent data
+      db.prepare('UPDATE tasks SET status = ?, assigned_agent_id = ? WHERE id = ?')
+        .run('assigned', result.id, config.taskId);
+      return result;
     } catch (error) {
       this.logger.warn('Orchestrator spawn failed, falling back to local');
     }
   }
   return this.spawnAgentLocally(config);
+}
+```
+
+**Agent Queries (AgentsController):**
+```typescript
+// All GET endpoints try orchestrator first
+async findAll(): Promise<Agent[]> {
+  if (this.orchestratorClient?.isAvailable()) {
+    try {
+      const agents = await this.orchestratorClient.getAgents();
+      // Enrich with local task data (title, repo)
+      return agents.map(a => ({ ...a, task_title: taskMap.get(a.taskId)?.title }));
+    } catch (error) {
+      this.logger.warn('Falling back to local database');
+    }
+  }
+  return this.findAllLocal();
 }
 ```
 
