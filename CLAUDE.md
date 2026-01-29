@@ -82,26 +82,85 @@ Orchestrator (Port 3020)
 | Component | Status | What's Missing |
 |-----------|--------|----------------|
 | **Real-time Log Streaming** | ⚠️ Basic | SSE endpoint exists but doesn't stream live updates |
-| **Vibe-Suite Integration** | ❌ Not started | HTTP client in vibe-suite to call orchestrator APIs |
 
 ---
 
-## Remaining Work
+## Vibe-Suite Integration (Phase 5) ✅ Complete
 
-### Phase 5: Vibe-Suite Integration (Next Step)
+The vibe-suite application now integrates with the orchestrator via an HTTP client.
 
-Create HTTP client in vibe-suite to call orchestrator:
+### Integration Architecture
 
 ```
-vibe-suite/backend/src/nest/clients/
-└── orchestrator.client.ts
+┌────────────────────────────────────────────────────────────────┐
+│                     VIBE-SUITE (Port 3030)                     │
+├────────────────────────────────────────────────────────────────┤
+│  ┌───────────────────────┐     ┌────────────────────────────┐  │
+│  │   OrchestratorClient  │────>│  ORCHESTRATOR (Port 3020)  │  │
+│  │                       │     │  - Agent spawning          │  │
+│  └───────────────────────┘     │  - Queue processing        │  │
+│            │                   │  - Event handling          │  │
+│            │ uses              └────────────────────────────┘  │
+│            ▼                                                   │
+│  ┌───────────────────────┐                                     │
+│  │  AgentManagerService  │                                     │
+│  │  - Try orchestrator   │                                     │
+│  │  - Fallback to local  │                                     │
+│  └───────────────────────┘                                     │
+└────────────────────────────────────────────────────────────────┘
 ```
 
-**Changes needed in vibe-suite:**
-1. Add OrchestratorClient service
-2. Update AgentsController to proxy to orchestrator
-3. Update QueueProcessor to call orchestrator.spawnAgent()
-4. Remove duplicated agent code from vibe-suite
+### Files Created in Vibe-Suite
+
+```
+vibe-suite/backend/src/nest/orchestrator/
+├── index.ts                  # Barrel exports
+├── orchestrator.client.ts    # HTTP client service
+├── orchestrator.module.ts    # NestJS module (global)
+└── orchestrator.types.ts     # TypeScript interfaces
+```
+
+### OrchestratorClient Features
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| `isAvailable()` | `GET /api/health` | Check if orchestrator is up |
+| `spawnAgent(config)` | `POST /api/agents/spawn` | Spawn new agent |
+| `killAgent(id)` | `POST /api/agents/:id/kill` | Kill running agent |
+| `getAgent(id)` | `GET /api/agents/:id` | Get agent details |
+| `getAgents()` | `GET /api/agents` | List agents |
+| `getAgentLogs(id)` | `GET /api/agents/:id/logs` | Get agent logs |
+| `getActiveAgents()` | `GET /api/agents/active` | List active agent IDs |
+| `getAnalytics()` | `GET /api/agents/analytics` | Get agent statistics |
+| `retryAgent(id)` | `POST /api/agents/:id/retry` | Retry failed agent |
+| `addToQueue(taskId)` | `POST /api/queue/add/:taskId` | Add task to queue |
+| `getQueueStatus()` | `GET /api/queue` | Get queue status |
+| `createEvent(...)` | `POST /api/events` | Create workflow event |
+
+### Fallback Strategy
+
+When orchestrator is unavailable, vibe-suite falls back to local implementation:
+
+```typescript
+async spawnAgent(config: AgentConfig): Promise<AgentInstance> {
+  if (this.orchestratorClient?.isAvailable()) {
+    try {
+      return await this.orchestratorClient.spawnAgent(config);
+    } catch (error) {
+      this.logger.warn('Orchestrator spawn failed, falling back to local');
+    }
+  }
+  return this.spawnAgentLocally(config);
+}
+```
+
+### Vibe-Suite Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| ORCHESTRATOR_URL | http://localhost:3020 | Orchestrator service URL |
+| ORCHESTRATOR_ENABLED | true | Enable/disable orchestrator integration |
+| ORCHESTRATOR_TIMEOUT | 10000 | Request timeout in milliseconds |
 
 ---
 
