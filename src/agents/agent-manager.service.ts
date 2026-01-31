@@ -2,9 +2,13 @@ import { Injectable, OnModuleInit, OnModuleDestroy, Inject, forwardRef } from '@
 import Docker from 'dockerode';
 import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs';
-import { spawn, ChildProcess } from 'child_process';
+import { exec, spawn, ChildProcess } from 'child_process';
+import { promisify } from 'util';
 import { DatabaseService } from '../database/database.service.js';
 import { LoggerService } from '../logger/logger.service.js';
+import { GithubService } from '../github/github.service.js';
+
+const execAsync = promisify(exec);
 import {
   AgentConfig,
   AgentInstance,
@@ -50,6 +54,7 @@ interface TrackedAgent {
   taskId: string;
   agentType: AgentType;
   hostProcess?: ChildProcess;
+  callbackUrl?: string;
 }
 
 @Injectable()
@@ -64,6 +69,7 @@ export class AgentManagerService implements OnModuleInit, OnModuleDestroy {
     @Inject(forwardRef(() => DatabaseService))
     private readonly databaseService: DatabaseService,
     private readonly logger: LoggerService,
+    private readonly githubService: GithubService,
     private readonly starterPromptService: StarterPromptService,
     private readonly codingPromptService: CodingPromptService,
     private readonly reviewerPromptService: ReviewerPromptService,
@@ -137,8 +143,29 @@ export class AgentManagerService implements OnModuleInit, OnModuleDestroy {
       const workspacePath = `${AGENT_CONFIG.workspaceBase}/${agentId}`;
       fs.mkdirSync(workspacePath, { recursive: true });
 
-      // Generate prompt (simplified for now)
-      const prompt = this.generatePrompt(config, agentId);
+      // Clone the repository from GitHub
+      const cloneUrl = this.githubService.getCloneUrl(config.repo);
+      this.logger.info('agent-manager', `Cloning ${config.repo} from GitHub for agent ${agentId}`);
+      await execAsync(`git clone ${cloneUrl} ${workspacePath}/repo`);
+
+      // Handle branch checkout based on agent type and config
+      if (config.branch) {
+        // Reviewer agents use the existing PR branch
+        this.logger.info('agent-manager', `Checking out branch '${config.branch}' for agent ${agentId}`);
+        await execAsync(`cd ${workspacePath}/repo && git fetch origin ${config.branch} && git checkout ${config.branch}`);
+      } else if (config.existingBranch) {
+        // Fix-up coding agents use the existing PR branch
+        this.logger.info('agent-manager', `Checking out existing branch '${config.existingBranch}' for agent ${agentId}`);
+        await execAsync(`cd ${workspacePath}/repo && git fetch origin ${config.existingBranch} && git checkout ${config.existingBranch}`);
+      } else if (agentType === 'coding') {
+        // Coding agents create a new feature branch
+        const branchName = `agent/${agentId}`;
+        this.logger.info('agent-manager', `Creating feature branch '${branchName}' for agent ${agentId}`);
+        await execAsync(`cd ${workspacePath}/repo && git checkout -b ${branchName}`);
+      }
+
+      // Use provided prompt or generate one
+      const prompt = config.prompt || this.generatePrompt(config, agentId);
       fs.writeFileSync(`${workspacePath}/task-prompt.md`, prompt);
 
       // Create container
@@ -152,7 +179,9 @@ export class AgentManagerService implements OnModuleInit, OnModuleDestroy {
           `GITHUB_TOKEN=${process.env.GITHUB_TOKEN || ''}`,
           `TASK_ID=${config.taskId}`,
           `AGENT_ID=${agentId}`,
-          `ORCHESTRATOR_API=http://localhost:${process.env.PORT || 3020}/api`,
+          // API endpoints for agent communication
+          `AGENT_SERVICE_URL=http://localhost:${process.env.PORT || 3020}`,
+          `VIBE_SUITE_API=http://localhost:${process.env.VIBE_SUITE_PORT || 3030}`,
           'HOME=/home/agent',
           'CLAUDE_CONFIG_DIR=/home/agent/.claude',
         ],
@@ -200,6 +229,7 @@ export class AgentManagerService implements OnModuleInit, OnModuleDestroy {
         timeoutId,
         taskId: config.taskId,
         agentType,
+        callbackUrl: config.callbackUrl,
       });
 
       // Start log streaming
@@ -255,7 +285,8 @@ export class AgentManagerService implements OnModuleInit, OnModuleDestroy {
       const workspacePath = `${AGENT_CONFIG.workspaceBase}/${agentId}`;
       fs.mkdirSync(workspacePath, { recursive: true });
 
-      const prompt = this.generatePrompt(config, agentId);
+      // Use provided prompt or generate one
+      const prompt = config.prompt || this.generatePrompt(config, agentId);
       fs.writeFileSync(`${workspacePath}/task-prompt.md`, prompt);
 
       // Spawn Claude Code process
@@ -271,7 +302,8 @@ export class AgentManagerService implements OnModuleInit, OnModuleDestroy {
           GITHUB_TOKEN: process.env.GITHUB_TOKEN || '',
           TASK_ID: config.taskId,
           AGENT_ID: agentId,
-          ORCHESTRATOR_API: `http://localhost:${process.env.PORT || 3020}/api`,
+          AGENT_SERVICE_URL: `http://localhost:${process.env.PORT || 3020}`,
+          VIBE_SUITE_API: `http://localhost:${process.env.VIBE_SUITE_PORT || 3030}`,
         },
         stdio: ['ignore', 'pipe', 'pipe'],
       });
@@ -295,6 +327,7 @@ export class AgentManagerService implements OnModuleInit, OnModuleDestroy {
         taskId: config.taskId,
         agentType,
         hostProcess: claudeProcess,
+        callbackUrl: config.callbackUrl,
       });
 
       this.logBuffer.set(agentId, []);
@@ -455,6 +488,9 @@ Complete the task described above. When finished, report your results.
     const logString = this.databaseService.getAgentLogsAsString(agentId);
     const status = exitCode === 0 ? AGENT_STATUS.COMPLETED : AGENT_STATUS.FAILED;
 
+    // Get tracked agent before deleting (need for callback)
+    const tracked = this.activeAgents.get(agentId);
+
     db.prepare(`
       UPDATE agents SET status = ?, exit_code = ?, logs = ?, completed_at = datetime('now')
       WHERE id = ?
@@ -467,8 +503,17 @@ Complete the task described above. When finished, report your results.
       `).run(agentId);
     }
 
-    const tracked = this.activeAgents.get(agentId);
+    // Extract agent's result message and post as comment
     if (tracked) {
+      this.postAgentResultAsComment(agentId, tracked.taskId, logString).catch(err => {
+        this.logger.warn('agent-manager', `Failed to post agent result as comment: ${err}`);
+      });
+
+      // Send callback notification
+      this.sendAgentCallback(agentId, tracked.taskId, status, exitCode).catch(err => {
+        this.logger.warn('agent-manager', `Failed to send callback for ${agentId}: ${err}`);
+      });
+
       clearTimeout(tracked.timeoutId);
       this.activeAgents.delete(agentId);
     }
@@ -818,6 +863,9 @@ Complete the task described above. When finished, report your results.
       const logString = this.databaseService.getAgentLogsAsString(agentId);
       const status = exitCode === 0 ? AGENT_STATUS.COMPLETED : AGENT_STATUS.FAILED;
 
+      // Get tracked agent before deleting (need for callback)
+      const tracked = this.activeAgents.get(agentId);
+
       db.prepare(`
         UPDATE agents SET status = ?, exit_code = ?, logs = ?, completed_at = datetime('now')
         WHERE id = ?
@@ -830,8 +878,12 @@ Complete the task described above. When finished, report your results.
         `).run(agentId);
       }
 
-      const tracked = this.activeAgents.get(agentId);
+      // Extract agent's result message and post as comment
       if (tracked) {
+        await this.postAgentResultAsComment(agentId, tracked.taskId, logString);
+
+        // Send callback notification
+        await this.sendAgentCallback(agentId, tracked.taskId, status, exitCode);
         clearTimeout(tracked.timeoutId);
         this.activeAgents.delete(agentId);
       }
@@ -848,5 +900,157 @@ Complete the task described above. When finished, report your results.
     } catch (error) {
       this.logger.error('agent-manager', `Error monitoring agent ${agentId}: ${error}`);
     }
+  }
+
+  /**
+   * Send callback to notify that an agent has completed
+   */
+  private async sendAgentCallback(
+    agentId: string,
+    taskId: string,
+    status: AgentDbStatus,
+    exitCode?: number,
+    error?: string,
+  ): Promise<void> {
+    const tracked = this.activeAgents.get(agentId);
+    if (!tracked?.callbackUrl) {
+      return;
+    }
+
+    const payload = {
+      agentId,
+      taskId,
+      status,
+      exitCode,
+      completedAt: new Date().toISOString(),
+      error,
+    };
+
+    try {
+      const response = await fetch(tracked.callbackUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(10000), // 10 second timeout
+      });
+
+      if (response.ok) {
+        this.logger.info('agent-manager', `Callback sent for agent ${agentId} to ${tracked.callbackUrl}`);
+      } else {
+        this.logger.warn('agent-manager', `Callback failed for agent ${agentId}: ${response.status} ${response.statusText}`);
+      }
+    } catch (err) {
+      // Log but don't throw - callback failure shouldn't affect agent completion
+      this.logger.warn('agent-manager', `Callback error for agent ${agentId}: ${err}`);
+    }
+  }
+
+  /**
+   * Extract agent's result message from logs and post as a comment to vibe-suite.
+   * Claude Code agents output their final result as JSON with a "result" field.
+   */
+  private async postAgentResultAsComment(
+    agentId: string,
+    taskId: string,
+    logString: string,
+  ): Promise<void> {
+    // Find the JSON result in the logs
+    // Format: TIMESTAMP {"type":"result","subtype":"success",...,"result":"## Summary..."}
+    const startIdx = logString.indexOf('{"type":"result"');
+    if (startIdx === -1) {
+      this.logger.info('agent-manager', `No result JSON found in agent ${agentId} output`);
+      return;
+    }
+
+    // Extract JSON by counting braces (handles nested objects/strings correctly)
+    const jsonStr = this.extractJsonObject(logString, startIdx);
+    if (!jsonStr) {
+      this.logger.warn('agent-manager', `Failed to extract JSON for agent ${agentId}`);
+      return;
+    }
+
+    let resultContent: string;
+    try {
+      const jsonData = JSON.parse(jsonStr);
+      if (!jsonData.result) {
+        this.logger.info('agent-manager', `Result JSON has no result field for agent ${agentId}`);
+        return;
+      }
+      resultContent = jsonData.result;
+    } catch (parseError) {
+      this.logger.warn('agent-manager', `Failed to parse result JSON for agent ${agentId}: ${parseError}`);
+      return;
+    }
+
+    // Truncate if too long (max 10000 chars for comment)
+    if (resultContent.length > 10000) {
+      resultContent = resultContent.substring(0, 9900) + '\n\n... (truncated)';
+    }
+
+    // Post to vibe-suite
+    const vibeSuiteUrl = process.env.VIBE_SUITE_URL || `http://localhost:${process.env.VIBE_SUITE_PORT || 3030}`;
+    const url = `${vibeSuiteUrl}/api/agent/tasks/${taskId}/comments`;
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Agent-ID': agentId,
+        },
+        body: JSON.stringify({ content: resultContent }),
+        signal: AbortSignal.timeout(10000),
+      });
+
+      if (response.ok) {
+        this.logger.info('agent-manager', `Posted result as comment for agent ${agentId} to task ${taskId}`);
+      } else {
+        const errorText = await response.text().catch(() => 'unknown');
+        this.logger.warn('agent-manager', `Failed to post comment for ${agentId}: ${response.status} - ${errorText}`);
+      }
+    } catch (err) {
+      this.logger.warn('agent-manager', `Error posting comment for ${agentId}: ${err}`);
+    }
+  }
+
+  /**
+   * Extract a JSON object from a string starting at startIdx.
+   * Handles nested objects and strings correctly by counting braces.
+   */
+  private extractJsonObject(str: string, startIdx: number): string | null {
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+
+    for (let i = startIdx; i < str.length; i++) {
+      const c = str[i];
+
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+
+      if (c === '\\' && inString) {
+        escaped = true;
+        continue;
+      }
+
+      if (c === '"' && !escaped) {
+        inString = !inString;
+        continue;
+      }
+
+      if (!inString) {
+        if (c === '{') depth++;
+        if (c === '}') {
+          depth--;
+          if (depth === 0) {
+            return str.substring(startIdx, i + 1);
+          }
+        }
+      }
+    }
+
+    return null; // No matching closing brace found
   }
 }

@@ -145,6 +145,11 @@ export interface AgentConfig {
   focusAreas?: string[];
   reviewFeedback?: string;
   existingBranch?: string;
+  // Workflow-driven spawning
+  /** Full prompt to pass to the agent (caller generates, orchestrator executes) */
+  prompt?: string;
+  /** Callback URL to notify when agent completes */
+  callbackUrl?: string;
 }
 
 // ==================== Event Types ====================

@@ -86,12 +86,29 @@ For each test case, record:
 - **Actual:** What actually happened
 - **Status:** PASS or FAIL
 
-### Phase 5: Report Results
+### Phase 5: Post Summary Comment (REQUIRED - DO THIS FIRST)
+
+**CRITICAL: You MUST post a summary comment BEFORE signaling completion. This is required.**
+
+Post your test results as a comment:
+
+\`\`\`bash
+curl -X POST $VIBE_SUITE_API/api/agent/tasks/${taskId}/comments \\
+  -H "Content-Type: application/json" \\
+  -H "X-Agent-ID: ${agentId}" \\
+  -d '{"content": "## Verification Results\\n\\n**Status:** PASSED/FAILED\\n\\n### Tests Run:\\n1. Test name - PASS/FAIL\\n2. ...\\n\\n### Notes:\\n..."}'
+\`\`\`
+
+**Verify you received a success response (HTTP 201) before proceeding to Phase 6.**
+
+### Phase 6: Signal Completion
+
+**Only after posting the comment**, signal the verification result:
 
 **If ALL tests PASS:**
 
 \`\`\`bash
-curl -X POST $VIBE_SUITE_API/agent/events \\
+curl -X POST $AGENT_SERVICE_URL/api/events \\
   -H "Content-Type: application/json" \\
   -H "X-Agent-ID: ${agentId}" \\
   -d '{
@@ -107,7 +124,7 @@ curl -X POST $VIBE_SUITE_API/agent/events \\
 **If ANY test FAILS:**
 
 \`\`\`bash
-curl -X POST $VIBE_SUITE_API/agent/events \\
+curl -X POST $AGENT_SERVICE_URL/api/events \\
   -H "Content-Type: application/json" \\
   -H "X-Agent-ID: ${agentId}" \\
   -d '{
@@ -123,17 +140,6 @@ curl -X POST $VIBE_SUITE_API/agent/events \\
       }
     }
   }'
-\`\`\`
-
-### Phase 6: Summary Comment
-
-Add a comment with your test results:
-
-\`\`\`bash
-curl -X POST $VIBE_SUITE_API/agent/tasks/${taskId}/comments \\
-  -H "Content-Type: application/json" \\
-  -H "X-Agent-ID: ${agentId}" \\
-  -d '{"content": "## Verification Results\\n\\n**Status:** PASSED/FAILED\\n\\n### Tests Run:\\n1. Test name - PASS/FAIL\\n2. ...\\n\\n### Notes:\\n..."}'
 \`\`\`
 
 ---

@@ -88,7 +88,7 @@ git commit -m "feat: Descriptive commit message"
 
 2. **Push your branch:**
 \`\`\`bash
-PUSH_RESULT=$(curl -s -X POST $VIBE_SUITE_API/github/push \\
+PUSH_RESULT=$(curl -s -X POST $VIBE_SUITE_API/api/github/push \\
   -H "Content-Type: application/json" \\
   -d '{"repo": "${repo}", "agentId": "${agentId}", "branch": "${branchName}"}')
 
@@ -101,7 +101,7 @@ fi
 
 3. **Create Pull Request:**
 \`\`\`bash
-PR_RESULT=$(curl -s -X POST $VIBE_SUITE_API/github/pr \\
+PR_RESULT=$(curl -s -X POST $VIBE_SUITE_API/api/github/pr \\
   -H "Content-Type: application/json" \\
   -d '{
     "repo": "${repo}",
@@ -115,9 +115,34 @@ PR_URL=$(echo "$PR_RESULT" | jq -r '.prUrl')
 echo "PR created: $PR_URL"
 \`\`\`
 
-4. **Create pr.created event:**
+### Phase 5: Testing (Optional)
+
+If testing is part of the plan:
+1. **Run tests** if the project has them
+2. **Use Playwright** for UI verification if applicable
+3. **Document test results** in your summary
+
+### Phase 6: Post Summary Comment (REQUIRED - DO THIS BEFORE SIGNALING)
+
+**CRITICAL: You MUST post a summary comment BEFORE creating the pr.created event.**
+
+Add a comment summarizing your work:
+
 \`\`\`bash
-curl -X POST $VIBE_SUITE_API/agent/events \\
+curl -X POST $VIBE_SUITE_API/api/agent/tasks/${taskId}/comments \\
+  -H "Content-Type: application/json" \\
+  -H "X-Agent-ID: ${agentId}" \\
+  -d '{"content": "## Implementation Summary\\n\\n- Changes made...\\n- PR created: #'"$PR_NUMBER"'\\n- Testing notes..."}'
+\`\`\`
+
+**Verify you received HTTP 201 success before proceeding.**
+
+### Phase 7: Signal PR Created
+
+**Only after posting the comment**, create the pr.created event:
+
+\`\`\`bash
+curl -X POST $AGENT_SERVICE_URL/api/events \\
   -H "Content-Type: application/json" \\
   -H "X-Agent-ID: ${agentId}" \\
   -d '{
@@ -130,24 +155,6 @@ curl -X POST $VIBE_SUITE_API/agent/events \\
       "branch": "${branchName}"
     }
   }'
-\`\`\`
-
-### Phase 5: Testing (Optional)
-
-If testing is part of the plan:
-1. **Run tests** if the project has them
-2. **Use Playwright** for UI verification if applicable
-3. **Document test results** in your summary
-
-### Phase 6: Summary Comment
-
-Add a comment summarizing your work:
-
-\`\`\`bash
-curl -X POST $VIBE_SUITE_API/agent/tasks/${taskId}/comments \\
-  -H "Content-Type: application/json" \\
-  -H "X-Agent-ID: ${agentId}" \\
-  -d '{"content": "## Implementation Summary\\n\\n- Changes made...\\n- PR created: #NUMBER\\n- Testing notes..."}'
 \`\`\`
 
 ---
@@ -293,7 +300,7 @@ ${reviewFeedback}
    - This triggers a reviewer to re-check your fixes
 
 \`\`\`bash
-curl -X POST $VIBE_SUITE_API/agent/events \\
+curl -X POST $AGENT_SERVICE_URL/api/events \\
   -H "Content-Type: application/json" \\
   -H "X-Agent-ID: $AGENT_ID" \\
   -d '{

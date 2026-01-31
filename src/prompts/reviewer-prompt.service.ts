@@ -92,7 +92,22 @@ Score the PR on these criteria (1-5 scale):
    - Comments where needed
    - PR description is clear
 
-### Phase 4: Decision
+### Phase 4: Post Summary Comment FIRST (REQUIRED)
+
+**CRITICAL: You MUST post a summary comment BEFORE taking any action or emitting events.**
+
+\`\`\`bash
+curl -X POST $VIBE_SUITE_API/api/agent/tasks/${taskId}/comments \\
+  -H "Content-Type: application/json" \\
+  -H "X-Agent-ID: ${agentId}" \\
+  -d '{"content": "## PR Review Summary\\n\\n- **Decision:** APPROVED/CHANGES REQUESTED\\n- **Scores:**\\n  - Correctness: X/5\\n  - Quality: X/5\\n  - Security: X/5\\n  - Tests: X/5\\n  - Docs: X/5\\n\\n### Notes:\\n..."}'
+\`\`\`
+
+**Verify you received HTTP 201 success before proceeding to Phase 5.**
+
+### Phase 5: Take Action
+
+**Only after posting the comment**, proceed with your decision:
 
 **If ALL criteria score 3 or higher → APPROVE & MERGE**
 
@@ -114,9 +129,9 @@ COMMIT_SHA=$(git rev-parse HEAD)
 echo "Merged commit: $COMMIT_SHA"
 \`\`\`
 
-4. **Create pr.merged event (CRITICAL - triggers deployer):**
+4. **Create pr.merged event (triggers deployer):**
 \`\`\`bash
-curl -X POST $VIBE_SUITE_API/agent/events \\
+curl -X POST $AGENT_SERVICE_URL/api/events \\
   -H "Content-Type: application/json" \\
   -H "X-Agent-ID: ${agentId}" \\
   -d '{
@@ -148,7 +163,7 @@ Please address these issues and update the PR."
 
 2. **Create pr.changes.requested event:**
 \`\`\`bash
-curl -X POST $VIBE_SUITE_API/agent/events \\
+curl -X POST $AGENT_SERVICE_URL/api/events \\
   -H "Content-Type: application/json" \\
   -H "X-Agent-ID: ${agentId}" \\
   -d '{
@@ -161,17 +176,6 @@ curl -X POST $VIBE_SUITE_API/agent/events \\
       "reviewComments": "Summary of requested changes..."
     }
   }'
-\`\`\`
-
-### Phase 5: Summary Comment
-
-Add a comment summarizing your review:
-
-\`\`\`bash
-curl -X POST $VIBE_SUITE_API/agent/tasks/${taskId}/comments \\
-  -H "Content-Type: application/json" \\
-  -H "X-Agent-ID: ${agentId}" \\
-  -d '{"content": "## PR Review Summary\\n\\n- **Decision:** APPROVED/CHANGES REQUESTED\\n- **Scores:**\\n  - Correctness: X/5\\n  - Quality: X/5\\n  - Security: X/5\\n  - Tests: X/5\\n  - Docs: X/5\\n\\n### Notes:\\n..."}'
 \`\`\`
 
 ---

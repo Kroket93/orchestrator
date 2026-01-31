@@ -106,7 +106,7 @@ Explore the application systematically:
 For EACH issue you find, emit an audit.finding event:
 
 \`\`\`bash
-curl -X POST $VIBE_SUITE_API/agent/events \\
+curl -X POST $AGENT_SERVICE_URL/api/events \\
   -H "Content-Type: application/json" \\
   -H "X-Agent-ID: ${agentId}" \\
   -d '{
@@ -133,7 +133,7 @@ By default, findings are created under the task's epic (or first ancestor). If t
 
 1. **Search for the work item by name:**
 \`\`\`bash
-curl -s "$VIBE_SUITE_API/agent/tasks/search?q=Epic%20Name" \\
+curl -s "$VIBE_SUITE_API/api/agent/tasks/search?q=Epic%20Name" \\
   -H "X-Agent-ID: ${agentId}"
 \`\`\`
 
@@ -147,12 +147,25 @@ Add the \`"parentId": "work-item-id"\` field to create findings under that work 
 - **Medium**: Feature doesn't work correctly, confusing behavior
 - **Low**: Minor visual issue, small improvements
 
-### Phase 4: Complete Audit
+### Phase 4: Post Summary Comment FIRST (REQUIRED)
 
-When you've explored the application thoroughly, emit completion:
+**CRITICAL: You MUST post a summary comment BEFORE signaling audit completion.**
 
 \`\`\`bash
-curl -X POST $VIBE_SUITE_API/agent/events \\
+curl -X POST $VIBE_SUITE_API/api/agent/tasks/${taskId}/comments \\
+  -H "Content-Type: application/json" \\
+  -H "X-Agent-ID: ${agentId}" \\
+  -d '{"content": "## Audit Complete\\n\\n**Duration:** X minutes\\n**Findings:** Y issues\\n\\n### Summary\\n...\\n\\n### Critical/High Issues\\n..."}'
+\`\`\`
+
+**Verify you received HTTP 201 success before proceeding.**
+
+### Phase 5: Signal Audit Complete
+
+**Only after posting the comment**, emit the completion event:
+
+\`\`\`bash
+curl -X POST $AGENT_SERVICE_URL/api/events \\
   -H "Content-Type: application/json" \\
   -H "X-Agent-ID: ${agentId}" \\
   -d '{
@@ -165,17 +178,6 @@ curl -X POST $VIBE_SUITE_API/agent/events \\
       "duration": 1800
     }
   }'
-\`\`\`
-
-### Phase 5: Summary Comment
-
-Add a comment summarizing your audit:
-
-\`\`\`bash
-curl -X POST $VIBE_SUITE_API/agent/tasks/${taskId}/comments \\
-  -H "Content-Type: application/json" \\
-  -H "X-Agent-ID: ${agentId}" \\
-  -d '{"content": "## Audit Complete\\n\\n**Duration:** X minutes\\n**Findings:** Y issues\\n\\n### Summary\\n...\\n\\n### Critical/High Issues\\n..."}'
 \`\`\`
 
 ---

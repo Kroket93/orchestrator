@@ -108,7 +108,24 @@ Keep exploration minimal - just enough to make the right routing decision.
 
 ---
 
-## Step 3: Choose Your Path
+## Step 3: Post Summary Comment FIRST (REQUIRED)
+
+**CRITICAL: Before emitting any routing event, you MUST post a summary comment explaining your decision.**
+
+\`\`\`bash
+curl -X POST $VIBE_SUITE_API/api/agent/tasks/${taskId}/comments \\
+  -H "Content-Type: application/json" \\
+  -H "X-Agent-ID: ${agentId}" \\
+  -d '{"content": "## Triage Summary\\n\\n**Decision:** [Coding/Auditor/Deployer/Closed]\\n\\n**Reasoning:** [Why this path was chosen]\\n\\n**Key observations:** [What you found during analysis]"}'
+\`\`\`
+
+**Verify you received HTTP 201 success before proceeding to Step 4.**
+
+---
+
+## Step 4: Emit Routing Event
+
+**Only after posting the comment**, emit the appropriate event:
 
 ### Path A: Code Changes Needed → Coding Agent
 
@@ -117,7 +134,7 @@ Use this when: New features, bug fixes, refactoring, or any code modifications a
 Create an execution plan and emit \`task.plan.created\`:
 
 \`\`\`bash
-curl -X POST $VIBE_SUITE_API/agent/events \\
+curl -X POST $AGENT_SERVICE_URL/api/events \\
   -H "Content-Type: application/json" \\
   -H "X-Agent-ID: ${agentId}" \\
   -d '{
@@ -153,7 +170,7 @@ Use this when:
 Emit \`audit.requested\`:
 
 \`\`\`bash
-curl -X POST $VIBE_SUITE_API/agent/events \\
+curl -X POST $AGENT_SERVICE_URL/api/events \\
   -H "Content-Type: application/json" \\
   -H "X-Agent-ID: ${agentId}" \\
   -d '{
@@ -179,7 +196,7 @@ Use this when:
 Emit \`deploy.requested\`:
 
 \`\`\`bash
-curl -X POST $VIBE_SUITE_API/agent/events \\
+curl -X POST $AGENT_SERVICE_URL/api/events \\
   -H "Content-Type: application/json" \\
   -H "X-Agent-ID: ${agentId}" \\
   -d '{
@@ -203,7 +220,7 @@ Use this when:
 Emit \`task.closed\`:
 
 \`\`\`bash
-curl -X POST $VIBE_SUITE_API/agent/events \\
+curl -X POST $AGENT_SERVICE_URL/api/events \\
   -H "Content-Type: application/json" \\
   -H "X-Agent-ID: ${agentId}" \\
   -d '{
@@ -222,19 +239,6 @@ Valid resolution values:
 - \`invalid\` - The task description is incorrect or doesn't apply
 - \`wont_fix\` - The issue is intentional or not worth fixing
 - \`no_action_needed\` - General case when no work is required
-
----
-
-## Step 4: Add Summary Comment
-
-Always add a comment explaining your routing decision:
-
-\`\`\`bash
-curl -X POST $VIBE_SUITE_API/agent/tasks/${taskId}/comments \\
-  -H "Content-Type: application/json" \\
-  -H "X-Agent-ID: ${agentId}" \\
-  -d '{"content": "## Triage Summary\\n\\n**Decision:** [Coding/Auditor/Deployer/Closed]\\n\\n**Reasoning:** [Why this path was chosen]\\n\\n**Key observations:** [What you found during analysis]"}'
-\`\`\`
 
 ---
 

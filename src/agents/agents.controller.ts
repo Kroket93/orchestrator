@@ -48,9 +48,9 @@ export class AgentsController {
       // TODO: Implement real-time log streaming
       res.end();
     } else {
-      // Return logs as plain text
+      // Return logs as JSON object
       const logs = await this.agentManager.getAgentLogs(id);
-      res.status(HttpStatus.OK).send(logs);
+      res.status(HttpStatus.OK).json({ logs });
     }
   }
 
