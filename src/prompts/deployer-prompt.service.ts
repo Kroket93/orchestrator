@@ -53,7 +53,7 @@ Deploy the merged code and verify the deployment is successful.
 Only one deployment can run per repository at a time.
 
 \`\`\`bash
-LOCK_RESPONSE=$(curl -s -X POST $VIBE_SUITE_API/deployments/lock \\
+LOCK_RESPONSE=$(curl -s -X POST $VIBE_SUITE_API/api/deployments/lock \\
   -H "Content-Type: application/json" \\
   -d '{"repo": "${repo}", "agentId": "${agentId}"}')
 echo "$LOCK_RESPONSE"
@@ -62,7 +62,7 @@ ACQUIRED=$(echo "$LOCK_RESPONSE" | jq -r '.acquired')
 if [ "$ACQUIRED" != "true" ]; then
   echo "Waiting for deployment lock..."
   while true; do
-    CHECK=$(curl -s "$VIBE_SUITE_API/deployments/lock/${repo}/check?agentId=${agentId}")
+    CHECK=$(curl -s "$VIBE_SUITE_API/api/deployments/lock/${repo}/check?agentId=${agentId}")
     ACQUIRED=$(echo "$CHECK" | jq -r '.acquired')
     if [ "$ACQUIRED" = "true" ]; then
       echo "Lock acquired!"
@@ -124,11 +124,26 @@ curl -I ${urlSection}
 - Verify key pages load correctly
 - Check for console errors
 
-### Phase 6: Report Deployment Status
+### Phase 6: Post Summary Comment FIRST (REQUIRED)
+
+**CRITICAL: You MUST post a summary comment BEFORE signaling deployment status.**
+
+\`\`\`bash
+curl -X POST $VIBE_SUITE_API/api/agent/tasks/${taskId}/comments \\
+  -H "Content-Type: application/json" \\
+  -H "X-Agent-ID: ${agentId}" \\
+  -d '{"content": "## Deployment Summary\\n\\n- Status: SUCCESS/FAILED\\n- URL: ${urlSection}\\n- Notes: ..."}'
+\`\`\`
+
+**Verify you received HTTP 201 success before proceeding.**
+
+### Phase 7: Report Deployment Status
+
+**Only after posting the comment**, emit the status event:
 
 **On Success:**
 \`\`\`bash
-curl -X POST $VIBE_SUITE_API/agent/events \\
+curl -X POST $AGENT_SERVICE_URL/api/events \\
   -H "Content-Type: application/json" \\
   -H "X-Agent-ID: ${agentId}" \\
   -d '{
@@ -144,7 +159,7 @@ curl -X POST $VIBE_SUITE_API/agent/events \\
 
 **On Failure:**
 \`\`\`bash
-curl -X POST $VIBE_SUITE_API/agent/events \\
+curl -X POST $AGENT_SERVICE_URL/api/events \\
   -H "Content-Type: application/json" \\
   -H "X-Agent-ID: ${agentId}" \\
   -d '{
@@ -158,36 +173,36 @@ curl -X POST $VIBE_SUITE_API/agent/events \\
   }'
 \`\`\`
 
-### Phase 7: Release Lock (ALWAYS!)
+### Phase 8: Release Lock (ALWAYS!)
 
 **Always release the lock, even if deployment failed:**
 
 \`\`\`bash
-curl -X POST $VIBE_SUITE_API/deployments/unlock \\
+curl -X POST $VIBE_SUITE_API/api/deployments/unlock \\
   -H "Content-Type: application/json" \\
   -d '{"repo": "${repo}", "agentId": "${agentId}"}'
-\`\`\`
-
-### Phase 8: Summary Comment
-
-Add a comment summarizing the deployment:
-
-\`\`\`bash
-curl -X POST $VIBE_SUITE_API/agent/tasks/${taskId}/comments \\
-  -H "Content-Type: application/json" \\
-  -H "X-Agent-ID: ${agentId}" \\
-  -d '{"content": "## Deployment Summary\\n\\n- Status: SUCCESS/FAILED\\n- URL: ${urlSection}\\n- Notes: ..."}'
 \`\`\`
 
 ---
 
 ## Important Guidelines
 
+### CRITICAL: Do NOT Modify Credentials or Secrets
+**NEVER delete, modify, or reset any of the following files:**
+- \`.admin-credentials.json\` - Admin authentication credentials
+- \`.jwt-secret\` - JWT signing secret
+- \`.github-token\` - GitHub API token
+- \`.env\` files - Environment configuration
+- Any other credential, secret, or token files
+
+If you encounter authentication issues during deployment, report them in your summary but **do not attempt to fix them by resetting credentials**. This causes production outages and locks out users.
+
 ### Deployment Safety
 - Always acquire the lock before deploying
 - Always release the lock when done (even on failure)
 - Check logs for errors after restarting services
 - Verify the application is accessible
+- **Never delete or modify configuration files outside the git repository**
 
 ### Rollback
 If the deployment fails and the app is broken:
