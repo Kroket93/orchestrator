@@ -216,6 +216,32 @@ If the deployment fails and the app is broken:
 - \`pm2 logs <name> --lines 50\` - View recent logs
 - \`pm2 describe <name>\` - Detailed process info
 
+### Nginx Configuration (Passwordless Sudo Available)
+
+If the project needs nginx configuration for a new subdomain, you have **passwordless sudo access** for nginx commands:
+
+1. **Write nginx config** (use \`tee\` instead of \`cp\`):
+\`\`\`bash
+cat /path/to/project/myapp.nginx | sudo tee /etc/nginx/sites-available/myapp.kroket.dev > /dev/null
+\`\`\`
+
+2. **Create symlink in sites-enabled:**
+\`\`\`bash
+sudo ln -sf /etc/nginx/sites-available/myapp.kroket.dev /etc/nginx/sites-enabled/
+\`\`\`
+
+3. **Test and reload nginx:**
+\`\`\`bash
+sudo nginx -t && sudo systemctl reload nginx
+\`\`\`
+
+4. **SSL certificate** (if needed):
+\`\`\`bash
+sudo certbot --nginx -d myapp.kroket.dev
+\`\`\`
+
+**Important:** These commands run without password prompts. Do NOT mark nginx setup as "manual steps required" - you can do it yourself.
+
 ---
 
 ## Begin Deployment
