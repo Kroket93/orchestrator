@@ -312,7 +312,8 @@ export class AgentManagerService implements OnModuleInit, OnModuleDestroy {
       fs.writeFileSync(`${workspacePath}/task-prompt.md`, prompt);
 
       // Spawn Claude Code process
-      const claudeProcess = spawn('claude', [
+      // Use absolute path to avoid PATH issues when running via PM2
+      const claudeProcess = spawn('/home/claude/.local/bin/claude', [
         '--dangerously-skip-permissions',
         '--output-format', 'stream-json',
         '--verbose',
