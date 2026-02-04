@@ -23,6 +23,7 @@ import { ReviewerPromptService } from '../prompts/reviewer-prompt.service.js';
 import { DeployerPromptService } from '../prompts/deployer-prompt.service.js';
 import { VerifierPromptService } from '../prompts/verifier-prompt.service.js';
 import { AuditorPromptService } from '../prompts/auditor-prompt.service.js';
+import { HealthcheckPromptService } from '../prompts/healthcheck-prompt.service.js';
 
 const docker = new Docker();
 
@@ -76,6 +77,7 @@ export class AgentManagerService implements OnModuleInit, OnModuleDestroy {
     private readonly deployerPromptService: DeployerPromptService,
     private readonly verifierPromptService: VerifierPromptService,
     private readonly auditorPromptService: AuditorPromptService,
+    private readonly healthcheckPromptService: HealthcheckPromptService,
   ) {}
 
   onModuleInit(): void {
@@ -450,6 +452,16 @@ export class AgentManagerService implements OnModuleInit, OnModuleDestroy {
           deploymentUrl: config.deploymentUrl || `https://${config.repo}.kroket.dev`,
           focusAreas: config.focusAreas,
           treeContext: config.treeContext,
+        });
+
+      case 'healthcheck':
+        return this.healthcheckPromptService.getHealthcheckPrompt({
+          taskId: config.taskId,
+          title: config.title,
+          description: config.description,
+          agentId,
+          appName: config.repo !== 'orchestrator' ? config.repo : undefined,
+          deploymentUrl: config.deploymentUrl,
         });
 
       default:

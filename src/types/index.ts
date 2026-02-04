@@ -1,5 +1,5 @@
 // Agent Types
-export type AgentType = 'starter' | 'coding' | 'reviewer' | 'deployer' | 'verifier' | 'auditor';
+export type AgentType = 'starter' | 'coding' | 'reviewer' | 'deployer' | 'verifier' | 'auditor' | 'healthcheck';
 export type AgentMode = 'docker' | 'host';
 export type AgentDbStatus = 'starting' | 'running' | 'completed' | 'failed' | 'timeout' | 'killed';
 export type TaskStatus = 'pending' | 'queued' | 'assigned' | 'in_progress' | 'completed' | 'failed';
@@ -42,6 +42,11 @@ export const AGENT_TYPE_CONFIGS: Record<AgentType, AgentTypeConfig> = {
     timeout: 45 * 60 * 1000, // 45 minutes
     mode: 'docker',
     description: 'Explores deployed apps to proactively find issues',
+  },
+  healthcheck: {
+    timeout: 60 * 60 * 1000, // 60 minutes
+    mode: 'host',
+    description: 'Nightly health check - inspects services, databases, and applications for issues',
   },
 };
 

@@ -5,6 +5,7 @@ import { ReviewerPromptService } from './reviewer-prompt.service.js';
 import { DeployerPromptService } from './deployer-prompt.service.js';
 import { VerifierPromptService } from './verifier-prompt.service.js';
 import { AuditorPromptService } from './auditor-prompt.service.js';
+import { HealthcheckPromptService } from './healthcheck-prompt.service.js';
 
 @Global()
 @Module({
@@ -15,6 +16,7 @@ import { AuditorPromptService } from './auditor-prompt.service.js';
     DeployerPromptService,
     VerifierPromptService,
     AuditorPromptService,
+    HealthcheckPromptService,
   ],
   exports: [
     StarterPromptService,
@@ -23,6 +25,7 @@ import { AuditorPromptService } from './auditor-prompt.service.js';
     DeployerPromptService,
     VerifierPromptService,
     AuditorPromptService,
+    HealthcheckPromptService,
   ],
 })
 export class PromptsModule {}
