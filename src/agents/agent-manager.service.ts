@@ -303,8 +303,9 @@ export class AgentManagerService implements OnModuleInit, OnModuleDestroy {
       WHERE id = ?
     `).run(agentId, config.taskId);
 
+    const workspacePath = `${AGENT_CONFIG.workspaceBase}/${agentId}`;
+
     try {
-      const workspacePath = `${AGENT_CONFIG.workspaceBase}/${agentId}`;
       fs.mkdirSync(workspacePath, { recursive: true });
 
       // Use provided prompt or generate one
@@ -394,6 +395,14 @@ export class AgentManagerService implements OnModuleInit, OnModuleDestroy {
         UPDATE tasks SET status = 'queued', assigned_agent_id = NULL
         WHERE id = ?
       `).run(config.taskId);
+
+      // Clean up workspace on spawn failure
+      try {
+        fs.rmSync(workspacePath, { recursive: true, force: true });
+        this.logger.info('agent-manager', `Cleaned up workspace for failed spawn ${agentId}`);
+      } catch {
+        // Ignore cleanup errors
+      }
 
       throw error;
     }
@@ -552,13 +561,12 @@ Complete the task described above. When finished, report your results.
       this.activeAgents.delete(agentId);
     }
 
-    if (exitCode === 0) {
-      try {
-        fs.rmSync(workspacePath, { recursive: true, force: true });
-        this.logger.info('agent-manager', `Cleaned up workspace for host agent ${agentId}`);
-      } catch {
-        this.logger.warn('agent-manager', `Failed to clean up workspace for host agent ${agentId}`);
-      }
+    // Clean up workspace regardless of exit code (logs are stored in DB for debugging)
+    try {
+      fs.rmSync(workspacePath, { recursive: true, force: true });
+      this.logger.info('agent-manager', `Cleaned up workspace for host agent ${agentId}`);
+    } catch {
+      this.logger.warn('agent-manager', `Failed to clean up workspace for host agent ${agentId}`);
     }
   }
 
