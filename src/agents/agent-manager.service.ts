@@ -47,6 +47,25 @@ const AGENT_CONFIG = {
   projectsDir: '/home/claude/projects',
 };
 
+/**
+ * Sanitize sensitive information from error messages.
+ * Removes GitHub tokens, API keys, and other secrets from strings
+ * to prevent them from being logged.
+ */
+function sanitizeErrorMessage(message: string): string {
+  return message
+    // Remove GitHub tokens from URLs (https://user:token@github.com/...)
+    .replace(/https:\/\/[^:]+:[^@]+@github\.com/g, 'https://[REDACTED]@github.com')
+    // Remove generic auth tokens in URLs (https://token@...)
+    .replace(/https:\/\/[^:@\/]+@/g, 'https://[REDACTED]@')
+    // Remove API keys that look like ghp_*, gho_*, github_pat_*, sk-*, etc.
+    .replace(/\b(ghp_|gho_|github_pat_|sk-|api[_-]?key[=:]\s*)[A-Za-z0-9_-]+/gi, '[REDACTED_TOKEN]')
+    // Remove Bearer tokens
+    .replace(/Bearer\s+[A-Za-z0-9._-]+/gi, 'Bearer [REDACTED]')
+    // Remove password= or password: patterns
+    .replace(/password[=:]\s*['"]?[^'"\s]+['"]?/gi, 'password=[REDACTED]');
+}
+
 /** Tracked agent info */
 interface TrackedAgent {
   containerId: string;
@@ -249,7 +268,8 @@ export class AgentManagerService implements OnModuleInit, OnModuleDestroy {
         agentType,
       };
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
+      const rawErrorMsg = error instanceof Error ? error.message : String(error);
+      const errorMsg = sanitizeErrorMessage(rawErrorMsg);
       this.logger.error('agent-manager', `Failed to spawn agent ${agentId}: ${errorMsg}`);
 
       db.prepare(`
@@ -360,7 +380,8 @@ export class AgentManagerService implements OnModuleInit, OnModuleDestroy {
         agentType,
       };
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
+      const rawErrorMsg = error instanceof Error ? error.message : String(error);
+      const errorMsg = sanitizeErrorMessage(rawErrorMsg);
       this.logger.error('agent-manager', `Failed to spawn host agent ${agentId}: ${errorMsg}`);
 
       db.prepare(`
