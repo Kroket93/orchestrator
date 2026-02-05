@@ -408,7 +408,7 @@ curl -X POST $VIBE_SUITE_API/api/agent/tasks \\
     "title": "Core Infrastructure Health",
     "description": "VPS, orchestrator, vibe-suite, databases, agent metrics",
     "type": "feature",
-    "parentId": "${epicId}",
+    "parent_id": "${epicId}",
     "repo": "orchestrator"
   }'
 \`\`\`
@@ -427,7 +427,7 @@ curl -X POST $VIBE_SUITE_API/api/agent/tasks \\
     "title": "Brief issue title",
     "description": "## Problem\\n\\nDetailed description...\\n\\n## Evidence\\n\\n\\\`\\\`\\\`\\nrelevant output\\n\\\`\\\`\\\`\\n\\n## Recommended Action\\n\\n...",
     "type": "bug",
-    "parentId": "FEATURE_ID_HERE",
+    "parent_id": "FEATURE_ID_HERE",
     "repo": "orchestrator",
     "metadata": {
       "severity": "critical|high|medium|low",
@@ -502,7 +502,7 @@ curl -X POST $VIBE_SUITE_API/api/agent/tasks \\
     "title": "Core Infrastructure Health",
     "description": "VPS, orchestrator, vibe-suite, databases, agent metrics",
     "type": "feature",
-    "parentId": "EPIC_ID_HERE",
+    "parent_id": "EPIC_ID_HERE",
     "repo": "orchestrator"
   }'
 \`\`\`
@@ -519,7 +519,7 @@ curl -X POST $VIBE_SUITE_API/api/agent/tasks \\
     "title": "Brief issue title",
     "description": "## Problem\\n\\nDetailed description...\\n\\n## Evidence\\n\\n\\\`\\\`\\\`\\nrelevant output\\n\\\`\\\`\\\`\\n\\n## Recommended Action\\n\\n...",
     "type": "bug",
-    "parentId": "FEATURE_ID_HERE",
+    "parent_id": "FEATURE_ID_HERE",
     "repo": "orchestrator",
     "metadata": {
       "severity": "critical|high|medium|low",
@@ -756,7 +756,7 @@ curl -X POST $VIBE_SUITE_API/api/agent/tasks \\
     "title": "App: ${appName}",
     "description": "Health check for ${appName} application",
     "type": "feature",
-    "parentId": "${epicId}",
+    "parent_id": "${epicId}",
     "repo": "${appName}"
   }'
 \`\`\`
@@ -775,7 +775,7 @@ curl -X POST $VIBE_SUITE_API/api/agent/tasks \\
     "title": "Brief issue title",
     "description": "## Problem\\n\\nDetailed description...\\n\\n## Steps to Reproduce\\n\\n1. ...\\n2. ...\\n\\n## Evidence\\n\\n[Screenshot or output]\\n\\n## Expected vs Actual\\n\\n...",
     "type": "bug",
-    "parentId": "FEATURE_ID_HERE",
+    "parent_id": "FEATURE_ID_HERE",
     "repo": "${appName}",
     "metadata": {
       "severity": "critical|high|medium|low",
@@ -854,7 +854,7 @@ curl -X POST $VIBE_SUITE_API/api/agent/tasks \\
     "title": "App: ${appName}",
     "description": "Health check for ${appName} application",
     "type": "feature",
-    "parentId": "EPIC_ID_HERE",
+    "parent_id": "EPIC_ID_HERE",
     "repo": "${appName}"
   }'
 \`\`\`
@@ -871,7 +871,7 @@ curl -X POST $VIBE_SUITE_API/api/agent/tasks \\
     "title": "Brief issue title",
     "description": "## Problem\\n\\nDetailed description...\\n\\n## Steps to Reproduce\\n\\n1. ...\\n2. ...\\n\\n## Evidence\\n\\n[Screenshot or output]\\n\\n## Expected vs Actual\\n\\n...",
     "type": "bug",
-    "parentId": "FEATURE_ID_HERE",
+    "parent_id": "FEATURE_ID_HERE",
     "repo": "${appName}",
     "metadata": {
       "severity": "critical|high|medium|low",
